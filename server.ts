@@ -13,6 +13,7 @@ import {
   LIVE_MODEL,
   PROACTIVE_GREETING_TRIGGER,
 } from "./server/tutorConfig.ts";
+import { toTaiwanHanyuPinyin } from "./src/utils/pinyinConverter.ts";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -60,6 +61,19 @@ async function startServer() {
 
     let session: Session | null = null;
     let isClosing = false;
+    let tutorRaw = "";
+    let studentRaw = "";
+    let tutorFinalized = true;
+    let studentFinalized = true;
+
+    const appendRawFragment = (current: string, fragment: string): string => {
+      const cleaned = fragment.replace(/\r?\n/g, " ").trim();
+      if (!cleaned) return current;
+      if (!current) return cleaned;
+      const needsSpace =
+        /[a-zA-Z0-9]$/.test(current) && /^[a-zA-Z0-9]/.test(cleaned);
+      return `${current}${needsSpace ? " " : ""}${cleaned}`;
+    };
 
     const cleanup = () => {
       if (isClosing) return;
@@ -95,21 +109,50 @@ async function startServer() {
             }
 
             if (serverContent.interrupted) {
+              tutorFinalized = true;
               sendJson(clientWs, { type: "interrupted" });
             }
 
             if (serverContent.inputTranscription?.text) {
-              sendJson(clientWs, {
-                type: "inputTranscript",
-                text: serverContent.inputTranscription.text,
-              });
+              const newTurn = studentFinalized;
+              if (newTurn) {
+                studentRaw = "";
+              }
+              studentFinalized = false;
+              tutorFinalized = true;
+              studentRaw = appendRawFragment(
+                studentRaw,
+                serverContent.inputTranscription.text
+              );
+              const pinyinText = toTaiwanHanyuPinyin(studentRaw);
+              if (pinyinText) {
+                sendJson(clientWs, {
+                  type: "inputTranscript",
+                  text: pinyinText,
+                  newTurn,
+                });
+              }
             }
 
             if (serverContent.outputTranscription?.text) {
-              sendJson(clientWs, {
-                type: "outputTranscript",
-                text: serverContent.outputTranscription.text,
-              });
+              const newTurn = tutorFinalized;
+              if (newTurn) {
+                tutorRaw = "";
+              }
+              tutorFinalized = false;
+              studentFinalized = true;
+              tutorRaw = appendRawFragment(
+                tutorRaw,
+                serverContent.outputTranscription.text
+              );
+              const pinyinText = toTaiwanHanyuPinyin(tutorRaw);
+              if (pinyinText) {
+                sendJson(clientWs, {
+                  type: "outputTranscript",
+                  text: pinyinText,
+                  newTurn,
+                });
+              }
             }
 
             for (const part of serverContent.modelTurn?.parts ?? []) {
@@ -122,6 +165,7 @@ async function startServer() {
             }
 
             if (serverContent.turnComplete) {
+              tutorFinalized = true;
               sendJson(clientWs, { type: "turnComplete" });
             }
           },
