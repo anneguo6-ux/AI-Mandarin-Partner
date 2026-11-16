@@ -1,0 +1,10 @@
+{
+  "name": "AI Mandarin Partner",
+  "description": "TOCFL Band A level daily conversation with AI for Mandarin learners to practice speaking and listening skills daily.",
+  "requestFramePermissions": [
+    "microphone"
+  ],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
